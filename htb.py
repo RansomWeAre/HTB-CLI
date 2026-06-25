@@ -41,6 +41,9 @@ import json
 import argparse
 import threading
 from datetime import datetime, timezone, timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
 
 try:
     import requests
@@ -71,6 +74,7 @@ def sep(n=55):  print(f"{C.GRAY}{'─'*n}{C.RESET}")
 # ─── Config ───────────────────────────────────────────────────────────────────
 
 BASE_URL = "https://labs.hackthebox.com/api/v4"
+BASE_URL_V5 = "https://labs.hackthebox.com/api/v5"
 API_KEY  = os.environ.get("HTB_API_KEY", "").strip()
 
 DIFF_COLORS = {
@@ -283,23 +287,30 @@ def banner():
 
 # ── --profile ─────────────────────────────────────────────────────────────────
 def cmd_profile():
-    # /user/info is the correct endpoint for the authenticated user's own profile
     data = get("/user/info")
     u = data.get("info", {})
     if not u:
         err("Could not retrieve profile. Check your API key.")
         return
+
+    user_id = u.get("id")
+
+    # Stats live in /user/profile/basic/<id> under profile.*
+    p = get(f"/user/profile/basic/{user_id}").get("profile", {})
+
     hdr("Your HTB Profile")
     sep()
-    print(f"  {C.BOLD}Name     :{C.RESET} {u.get('name')}  (ID: {u.get('id')})")
-    print(f"  {C.BOLD}Rank     :{C.RESET} {C.YELLOW}{u.get('rank','?')}{C.RESET}  •  Points: {C.CYAN}{u.get('points','?')}{C.RESET}")
-    print(f"  {C.BOLD}Respects :{C.RESET} {u.get('respects','?')}")
-    print(f"  {C.BOLD}Owns     :{C.RESET} {C.GREEN}{u.get('user_owns',0)} user{C.RESET}  /  {C.RED}{u.get('system_owns',0)} root{C.RESET}")
+    print(f"  {C.BOLD}Name      :{C.RESET} {p.get('name', u.get('name'))}  (ID: {user_id})")
+    print(f"  {C.BOLD}Rank      :{C.RESET} {C.YELLOW}{p.get('rank', '?')}{C.RESET}  (#{p.get('ranking', '?')} globally)")
+    print(f"  {C.BOLD}Points    :{C.RESET} {C.CYAN}{p.get('points', '?')}{C.RESET}")
+    print(f"  {C.BOLD}Respects  :{C.RESET} {p.get('respects', '?')}")
+    print(f"  {C.BOLD}Owns      :{C.RESET} {C.GREEN}{p.get('user_owns', 0)} user{C.RESET}  /  {C.RED}{p.get('system_owns', 0)} root{C.RESET}")
+    print(f"  {C.BOLD}Bloods    :{C.RESET} {C.GREEN}{p.get('user_bloods', 0)} user{C.RESET}  /  {C.RED}{p.get('system_bloods', 0)} root{C.RESET}")
     team = u.get("team")
     if team:
-        print(f"  {C.BOLD}Team     :{C.RESET} {team.get('name','?')}")
+        print(f"  {C.BOLD}Team      :{C.RESET} {team.get('name', '?')}")
+    print(f"  {C.BOLD}Next rank :{C.RESET} {p.get('next_rank', '?')}  ({p.get('next_rank_points', '?')} pts needed)")
     sep()
-
 
 # ── --search ──────────────────────────────────────────────────────────────────
 def cmd_search(query: str):
@@ -511,9 +522,19 @@ def cmd_spawn(id_or_name: str):
         print(f"  {C.BOLD}Name      :{C.RESET} {data.get('name')}")
         ip = data.get("ip")
         print(f"  {C.BOLD}Target IP :{C.RESET} {C.GREEN}{C.BOLD}{ip}{C.RESET}")
-        expires = parse_utc((data.get("playInfo") or {}).get("expires_at", "") or data.get("expires_at", ""))
+        expires = parse_utc(
+            (data.get("playInfo") or {}).get("expires_at", "")
+            or data.get("expires_at", "")
+        )
         if expires:
             print(f"  {C.BOLD}Expires   :{C.RESET} {fmt_dt(expires)}")
+
+        # Print info_status if present
+        status_msg = data.get("info_status", "")
+        if status_msg:
+            sep()
+            print(f"  {C.BOLD}Info      :{C.RESET} {C.YELLOW}{status_msg}{C.RESET}")
+
         sep()
         print(f"  {C.GRAY}Tip: sudo openvpn ~/path/to/your.ovpn{C.RESET}")
     else:
@@ -549,16 +570,25 @@ def cmd_reset(id_or_name: str):
 def _do_submit(machine_id, name, flag, flag_type, difficulty):
     """Submit one flag. Returns True on success."""
     payload = {"id": machine_id, "flag": flag.strip(), "difficulty": difficulty}
-    result  = post("/machine/own", payload, silent=True)
-
-    if not result:
+    
+    # v4 /machine/own has been removed — use v5
+    url = f"{BASE_URL_V5}/machine/own"
+    try:
+        r = requests.post(url, headers=_headers(), json=payload, timeout=20)
+        result = r.json()
+    except requests.exceptions.ConnectionError:
         err(f"No response submitting {flag_type} flag. Is the machine spawned and active?")
         return False
+    except requests.exceptions.Timeout:
+        err("Request timed out (20s).")
+        return False
+    except Exception:
+        err("Failed to parse response.")
+        return False
 
-    msg       = result.get("message", "")
+    msg = result.get("message", "")
     msg_lower = str(msg).lower()
 
-    # Check NEGATIVES first — "Incorrect" contains "correct" so order is critical
     if "incorrect" in msg_lower or "wrong" in msg_lower or "invalid flag" in msg_lower:
         err(f"{flag_type.upper()} flag incorrect ✘  Double-check and try again.")
         if msg and not isinstance(msg, list):
@@ -570,16 +600,18 @@ def _do_submit(machine_id, name, flag, flag_type, difficulty):
     elif "not found" in msg_lower or "no query" in msg_lower:
         err(f"Machine not found or not active. Is '{name}' spawned?")
         return False
-    # Then check POSITIVES
-    elif isinstance(msg, list) or "correct" in msg_lower or "owned" in msg_lower \
-         or result.get("success") is True:
+    elif (
+        isinstance(msg, list)
+        or "correct" in msg_lower
+        or "owned" in msg_lower
+        or result.get("success") is True
+    ):
         ok(f"{C.BOLD}{C.GREEN}{flag_type.upper()} FLAG ACCEPTED{C.RESET} — '{name}' {flag_type} pwned! 🎉")
         return True
     else:
         warn(f"Unexpected server response for {flag_type}:")
         print(f"  {C.GRAY}{json.dumps(result, indent=2)}{C.RESET}")
         return False
-
 
 def cmd_submit(id_or_name: str, flag: str, flag_type: str, difficulty: int):
     m = resolve_machine(id_or_name)
