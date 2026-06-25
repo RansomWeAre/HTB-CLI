@@ -41,6 +41,9 @@ import json
 import argparse
 import threading
 from datetime import datetime, timezone, timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
 
 try:
     import requests
@@ -283,23 +286,30 @@ def banner():
 
 # ── --profile ─────────────────────────────────────────────────────────────────
 def cmd_profile():
-    # /user/info is the correct endpoint for the authenticated user's own profile
     data = get("/user/info")
     u = data.get("info", {})
     if not u:
         err("Could not retrieve profile. Check your API key.")
         return
+
+    user_id = u.get("id")
+
+    # Stats live in /user/profile/basic/<id> under profile.*
+    p = get(f"/user/profile/basic/{user_id}").get("profile", {})
+
     hdr("Your HTB Profile")
     sep()
-    print(f"  {C.BOLD}Name     :{C.RESET} {u.get('name')}  (ID: {u.get('id')})")
-    print(f"  {C.BOLD}Rank     :{C.RESET} {C.YELLOW}{u.get('rank','?')}{C.RESET}  •  Points: {C.CYAN}{u.get('points','?')}{C.RESET}")
-    print(f"  {C.BOLD}Respects :{C.RESET} {u.get('respects','?')}")
-    print(f"  {C.BOLD}Owns     :{C.RESET} {C.GREEN}{u.get('user_owns',0)} user{C.RESET}  /  {C.RED}{u.get('system_owns',0)} root{C.RESET}")
+    print(f"  {C.BOLD}Name      :{C.RESET} {p.get('name', u.get('name'))}  (ID: {user_id})")
+    print(f"  {C.BOLD}Rank      :{C.RESET} {C.YELLOW}{p.get('rank', '?')}{C.RESET}  (#{p.get('ranking', '?')} globally)")
+    print(f"  {C.BOLD}Points    :{C.RESET} {C.CYAN}{p.get('points', '?')}{C.RESET}")
+    print(f"  {C.BOLD}Respects  :{C.RESET} {p.get('respects', '?')}")
+    print(f"  {C.BOLD}Owns      :{C.RESET} {C.GREEN}{p.get('user_owns', 0)} user{C.RESET}  /  {C.RED}{p.get('system_owns', 0)} root{C.RESET}")
+    print(f"  {C.BOLD}Bloods    :{C.RESET} {C.GREEN}{p.get('user_bloods', 0)} user{C.RESET}  /  {C.RED}{p.get('system_bloods', 0)} root{C.RESET}")
     team = u.get("team")
     if team:
-        print(f"  {C.BOLD}Team     :{C.RESET} {team.get('name','?')}")
+        print(f"  {C.BOLD}Team      :{C.RESET} {team.get('name', '?')}")
+    print(f"  {C.BOLD}Next rank :{C.RESET} {p.get('next_rank', '?')}  ({p.get('next_rank_points', '?')} pts needed)")
     sep()
-
 
 # ── --search ──────────────────────────────────────────────────────────────────
 def cmd_search(query: str):
