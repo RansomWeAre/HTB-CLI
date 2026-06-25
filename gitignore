@@ -1,0 +1,37 @@
+# Environment / secrets
+.env
+*.env
+config.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+env/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Output / logs
+*.log
+nmap/
+*.nmap
+*.gnmap
+*.xml
