@@ -41,6 +41,9 @@ import json
 import argparse
 import threading
 from datetime import datetime, timezone, timedelta
+from dotenv import load_dotenv
+
+load_dotenv()  # Load .env file if present
 
 try:
     import requests
@@ -50,58 +53,87 @@ except ImportError:
 
 # ─── ANSI Colors ──────────────────────────────────────────────────────────────
 
-class C:
-    RED    = "\033[91m"
-    GREEN  = "\033[92m"
-    YELLOW = "\033[93m"
-    BLUE   = "\033[94m"
-    CYAN   = "\033[96m"
-    WHITE  = "\033[97m"
-    GRAY   = "\033[90m"
-    BOLD   = "\033[1m"
-    RESET  = "\033[0m"
 
-def ok(msg):    print(f"{C.GREEN}[+]{C.RESET} {msg}")
-def info(msg):  print(f"{C.CYAN}[*]{C.RESET} {msg}")
-def warn(msg):  print(f"{C.YELLOW}[!]{C.RESET} {msg}")
-def err(msg):   print(f"{C.RED}[-]{C.RESET} {msg}")
-def hdr(msg):   print(f"\n{C.BOLD}{C.BLUE}{msg}{C.RESET}")
-def sep(n=55):  print(f"{C.GRAY}{'─'*n}{C.RESET}")
+class C:
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    CYAN = "\033[96m"
+    WHITE = "\033[97m"
+    GRAY = "\033[90m"
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
+
+
+def ok(msg):
+    print(f"{C.GREEN}[+]{C.RESET} {msg}")
+
+
+def info(msg):
+    print(f"{C.CYAN}[*]{C.RESET} {msg}")
+
+
+def warn(msg):
+    print(f"{C.YELLOW}[!]{C.RESET} {msg}")
+
+
+def err(msg):
+    print(f"{C.RED}[-]{C.RESET} {msg}")
+
+
+def hdr(msg):
+    print(f"\n{C.BOLD}{C.BLUE}{msg}{C.RESET}")
+
+
+def sep(n=55):
+    print(f"{C.GRAY}{'─' * n}{C.RESET}")
+
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
 BASE_URL = "https://labs.hackthebox.com/api/v4"
-API_KEY  = os.environ.get("HTB_API_KEY", "").strip()
+API_KEY = os.environ.get("HTB_API_KEY", "").strip()
 
 DIFF_COLORS = {
-    "Easy":      C.GREEN,
-    "Medium":    C.YELLOW,
-    "Hard":      C.RED,
-    "Insane":    C.CYAN,
+    "Easy": C.GREEN,
+    "Medium": C.YELLOW,
+    "Hard": C.RED,
+    "Insane": C.CYAN,
     "Very Easy": C.GREEN,
 }
-OS_ICONS = {"Linux": "🐧", "Windows": "🪟", "FreeBSD": "😈", "OpenBSD": "🐡", "Android": "🤖"}
+OS_ICONS = {
+    "Linux": "🐧",
+    "Windows": "🪟",
+    "FreeBSD": "😈",
+    "OpenBSD": "🐡",
+    "Android": "🤖",
+}
 
 # ─── HTTP helpers ──────────────────────────────────────────────────────────────
+
 
 def _headers():
     if not API_KEY:
         err("HTB_API_KEY not set!")
         print(f"  {C.YELLOW}→ export HTB_API_KEY='your_token_here'{C.RESET}")
-        print(f"  {C.GRAY}  (HTB → Profile → Settings → App Tokens → Create){C.RESET}")
+        print(
+            f"  {C.GRAY}  (HTB → Profile → Settings → App Tokens → Create){C.RESET}")
         sys.exit(1)
     return {
         "Authorization": f"Bearer {API_KEY}",
-        "Content-Type":  "application/json",
-        "Accept":        "application/json",
-        "User-Agent":    "htb-cli/2.1 alhamrizvi-cloud",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "htb-cli/2.1 alhamrizvi-cloud",
     }
+
 
 def _request(method, path, data=None, params=None, silent=False):
     url = f"{BASE_URL}{path}"
     try:
-        r = requests.request(method, url, headers=_headers(),
-                             json=data, params=params, timeout=20)
+        r = requests.request(
+            method, url, headers=_headers(), json=data, params=params, timeout=20
+        )
     except requests.exceptions.ConnectionError:
         if not silent:
             err("Connection failed. Check your internet / VPN connection.")
@@ -125,7 +157,7 @@ def _request(method, path, data=None, params=None, silent=False):
         if not silent:
             err(f"HTTP {r.status_code}: {status_msgs[r.status_code]}")
             try:
-                body   = r.json()
+                body = r.json()
                 detail = body.get("message") or body.get("error") or ""
                 if detail and not isinstance(detail, list):
                     print(f"  {C.GRAY}Detail: {detail}{C.RESET}")
@@ -140,11 +172,14 @@ def _request(method, path, data=None, params=None, silent=False):
             err(f"Non-JSON response ({r.status_code}): {r.text[:300]}")
         return {}
 
+
 def get(path, params=None, silent=False):
     return _request("GET", path, params=params, silent=silent)
 
+
 def post(path, data=None, silent=False):
     return _request("POST", path, data=data, silent=silent)
+
 
 def _fetch_all_pages(endpoint):
     """
@@ -155,19 +190,22 @@ def _fetch_all_pages(endpoint):
     all_items = []
     page = 1
     while True:
-        resp = get(endpoint, params={"page": page, "per_page": 100}, silent=True)
+        resp = get(endpoint, params={"page": page,
+                   "per_page": 100}, silent=True)
         items = resp.get("data", [])
         if not items:
             break
         all_items.extend(items)
-        meta      = resp.get("meta", {}) or {}
+        meta = resp.get("meta", {}) or {}
         last_page = meta.get("last_page", 1)
         if page >= last_page:
             break
         page += 1
     return all_items
 
+
 # ─── Time helpers ──────────────────────────────────────────────────────────────
+
 
 def parse_utc(s):
     """Parse ISO datetime string → always returns timezone-aware UTC datetime."""
@@ -185,30 +223,37 @@ def parse_utc(s):
     except Exception:
         return None
 
+
 def countdown_str(dt):
-    now  = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
     diff = dt - now
     if diff.total_seconds() <= 0:
         return f"{C.GREEN}Released{C.RESET}"
     total_s = int(diff.total_seconds())
-    d, rem  = divmod(total_s, 86400)
-    h, rem  = divmod(rem, 3600)
-    m, s    = divmod(rem, 60)
-    parts   = []
-    if d: parts.append(f"{d}d")
-    if h: parts.append(f"{h}h")
-    if m: parts.append(f"{m}m")
+    d, rem = divmod(total_s, 86400)
+    h, rem = divmod(rem, 3600)
+    m, s = divmod(rem, 60)
+    parts = []
+    if d:
+        parts.append(f"{d}d")
+    if h:
+        parts.append(f"{h}h")
+    if m:
+        parts.append(f"{m}m")
     parts.append(f"{s}s")
     return f"{C.YELLOW}" + " ".join(parts) + f"{C.RESET}"
+
 
 def fmt_dt(dt):
     if not dt:
         return "N/A"
     return dt.astimezone().strftime("%Y-%m-%d %H:%M %Z")
 
+
 # ─── Machine resolution ────────────────────────────────────────────────────────
 
 _machine_cache = {}
+
 
 def resolve_machine(id_or_name: str) -> dict:
     """Return machine info dict given a numeric ID or machine name."""
@@ -248,26 +293,33 @@ def resolve_machine(id_or_name: str) -> dict:
     err(f"Machine '{id_or_name}' not found. Use --search to find machines.")
     sys.exit(1)
 
+
 # ─── Display helpers ───────────────────────────────────────────────────────────
+
 
 def diff_colored(text):
     c = DIFF_COLORS.get(str(text), C.WHITE)
     return f"{c}{text}{C.RESET}"
 
+
 def os_icon(name):
     return OS_ICONS.get(name, "💻")
+
 
 def own_badge(owned):
     return f"{C.GREEN}✔ Owned{C.RESET}" if owned else f"{C.GRAY}✘ Not owned{C.RESET}"
 
+
 def spinner_frames():
-    frames = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]
+    frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     i = 0
     while True:
         yield frames[i % len(frames)]
         i += 1
 
+
 # ─── Commands ──────────────────────────────────────────────────────────────────
+
 
 def banner():
     print(f"""
@@ -283,28 +335,46 @@ def banner():
 
 # ── --profile ─────────────────────────────────────────────────────────────────
 def cmd_profile():
-    # /user/info is the correct endpoint for the authenticated user's own profile
     data = get("/user/info")
     u = data.get("info", {})
     if not u:
         err("Could not retrieve profile. Check your API key.")
         return
+
+    user_id = u.get("id")
+
+    # Stats live in /user/profile/basic/<id> under profile.*
+    p = get(f"/user/profile/basic/{user_id}").get("profile", {})
+
     hdr("Your HTB Profile")
     sep()
-    print(f"  {C.BOLD}Name     :{C.RESET} {u.get('name')}  (ID: {u.get('id')})")
-    print(f"  {C.BOLD}Rank     :{C.RESET} {C.YELLOW}{u.get('rank','?')}{C.RESET}  •  Points: {C.CYAN}{u.get('points','?')}{C.RESET}")
-    print(f"  {C.BOLD}Respects :{C.RESET} {u.get('respects','?')}")
-    print(f"  {C.BOLD}Owns     :{C.RESET} {C.GREEN}{u.get('user_owns',0)} user{C.RESET}  /  {C.RED}{u.get('system_owns',0)} root{C.RESET}")
+    print(
+        f"  {C.BOLD}Name      :{C.RESET} {p.get('name', u.get('name'))}  (ID: {user_id})"
+    )
+    print(
+        f"  {C.BOLD}Rank      :{C.RESET} {C.YELLOW}{p.get('rank', '?')}{C.RESET}  (#{p.get('ranking', '?')} globally)"
+    )
+    print(f"  {C.BOLD}Points    :{C.RESET} {C.CYAN}{p.get('points', '?')}{C.RESET}")
+    print(f"  {C.BOLD}Respects  :{C.RESET} {p.get('respects', '?')}")
+    print(
+        f"  {C.BOLD}Owns      :{C.RESET} {C.GREEN}{p.get('user_owns', 0)} user{C.RESET}  /  {C.RED}{p.get('system_owns', 0)} root{C.RESET}"
+    )
+    print(
+        f"  {C.BOLD}Bloods    :{C.RESET} {C.GREEN}{p.get('user_bloods', 0)} user{C.RESET}  /  {C.RED}{p.get('system_bloods', 0)} root{C.RESET}"
+    )
     team = u.get("team")
     if team:
-        print(f"  {C.BOLD}Team     :{C.RESET} {team.get('name','?')}")
+        print(f"  {C.BOLD}Team      :{C.RESET} {team.get('name', '?')}")
+    print(
+        f"  {C.BOLD}Next rank :{C.RESET} {p.get('next_rank', '?')}  ({p.get('next_rank_points', '?')} pts needed)"
+    )
     sep()
 
 
 # ── --search ──────────────────────────────────────────────────────────────────
 def cmd_search(query: str):
     info(f"Searching for '{query}' (fetching active machines) ...")
-    active  = _fetch_all_pages("/machine/paginated")
+    active = _fetch_all_pages("/machine/paginated")
     info(f"Fetching retired machines ...")
     retired = _fetch_all_pages("/machine/list/retired/paginated")
     all_machines = active + retired
@@ -319,58 +389,84 @@ def cmd_search(query: str):
 
     hdr(f"Search Results  ({len(results)} found for '{query}')")
     sep(72)
-    print(f"  {C.BOLD}{'ID':<7} {'Name':<20} {'OS':<10} {'Diff':<10} {'Pts':<5} {'Status':<10} Owns{C.RESET}")
+    print(
+        f"  {C.BOLD}{'ID':<7} {'Name':<20} {'OS':<10} {'Diff':<10} {'Pts':<5} {'Status':<10} Owns{C.RESET}"
+    )
     sep(72)
     for m in results:
-        status = f"{C.GRAY}Retired{C.RESET}" if m.get("retired") else f"{C.GREEN}Active{C.RESET}"
+        status = (
+            f"{C.GRAY}Retired{C.RESET}"
+            if m.get("retired")
+            else f"{C.GREEN}Active{C.RESET}"
+        )
         d_text = m.get("difficultyText", "?")
-        u_own  = m.get("authUserInUserOwns")
-        r_own  = m.get("authUserInRootOwns")
-        owns   = (f"{C.GREEN}U{C.RESET}" if u_own else " ") + (f" {C.RED}R{C.RESET}" if r_own else "  ")
-        print(f"  {str(m.get('id','?')):<7} {m.get('name','?'):<20} "
-              f"{os_icon(m.get('os','?'))} {m.get('os','?'):<8} "
-              f"{diff_colored(d_text):<20} {str(m.get('points','?')):<5} "
-              f"{status:<20} {owns}")
+        u_own = m.get("authUserInUserOwns")
+        r_own = m.get("authUserInRootOwns")
+        owns = (f"{C.GREEN}U{C.RESET}" if u_own else " ") + (
+            f" {C.RED}R{C.RESET}" if r_own else "  "
+        )
+        print(
+            f"  {str(m.get('id', '?')):<7} {m.get('name', '?'):<20} "
+            f"{os_icon(m.get('os', '?'))} {m.get('os', '?'):<8} "
+            f"{diff_colored(d_text):<20} {str(m.get('points', '?')):<5} "
+            f"{status:<20} {owns}"
+        )
     sep(72)
 
 
 # ── --info ────────────────────────────────────────────────────────────────────
 def cmd_info(id_or_name: str):
     info(f"Fetching machine info for '{id_or_name}' ...")
-    m    = resolve_machine(id_or_name)
+    m = resolve_machine(id_or_name)
     play = m.get("playInfo", {}) or {}
 
-    hdr(f"{os_icon(m.get('os','?'))} {m.get('name')}  (ID: {m.get('id')})")
+    hdr(f"{os_icon(m.get('os', '?'))} {m.get('name')}  (ID: {m.get('id')})")
     sep()
-    print(f"  {C.BOLD}OS          :{C.RESET} {m.get('os','?')}")
-    print(f"  {C.BOLD}Difficulty  :{C.RESET} {diff_colored(m.get('difficultyText','?'))}  ({m.get('difficulty','?')}/100)")
-    print(f"  {C.BOLD}Points      :{C.RESET} {C.CYAN}{m.get('points','?')}{C.RESET}  (static: {m.get('static_points','?')})")
+    print(f"  {C.BOLD}OS          :{C.RESET} {m.get('os', '?')}")
+    print(
+        f"  {C.BOLD}Difficulty  :{C.RESET} {diff_colored(m.get('difficultyText', '?'))}  ({m.get('difficulty', '?')}/100)"
+    )
+    print(
+        f"  {C.BOLD}Points      :{C.RESET} {C.CYAN}{m.get('points', '?')}{C.RESET}  (static: {m.get('static_points', '?')})"
+    )
     print(f"  {C.BOLD}Free Tier   :{C.RESET} {'Yes' if m.get('free') else 'No'}")
     released = parse_utc(m.get("release", ""))
     if released:
         print(f"  {C.BOLD}Released    :{C.RESET} {fmt_dt(released)}")
-    print(f"  {C.BOLD}Status      :{C.RESET} {'Retired' if m.get('retired') else C.GREEN+'Active'+C.RESET}")
+    print(
+        f"  {C.BOLD}Status      :{C.RESET} {'Retired' if m.get('retired') else C.GREEN + 'Active' + C.RESET}"
+    )
     sep()
 
     ip = m.get("ip")
-    print(f"  {C.BOLD}Target IP   :{C.RESET} {C.GREEN+str(ip)+C.RESET if ip else C.GRAY+'Not spawned'+C.RESET}")
+    print(
+        f"  {C.BOLD}Target IP   :{C.RESET} {C.GREEN + str(ip) + C.RESET if ip else C.GRAY + 'Not spawned' + C.RESET}"
+    )
     if play.get("isSpawned"):
         expires = parse_utc(play.get("expires_at", ""))
         print(f"  {C.BOLD}Expires     :{C.RESET} {fmt_dt(expires)}")
-    print(f"  {C.BOLD}Spawned     :{C.RESET} {'Yes' if play.get('isSpawned') else 'No'}")
+    print(
+        f"  {C.BOLD}Spawned     :{C.RESET} {'Yes' if play.get('isSpawned') else 'No'}"
+    )
     sep()
 
-    print(f"  {C.BOLD}User Flag   :{C.RESET} {own_badge(m.get('authUserInUserOwns'))}")
-    print(f"  {C.BOLD}Root Flag   :{C.RESET} {own_badge(m.get('authUserInRootOwns'))}")
-    print(f"  {C.BOLD}Global Owns :{C.RESET} {C.GREEN}{m.get('user_owns_count','?')} user{C.RESET}  /  {C.RED}{m.get('root_owns_count','?')} root{C.RESET}")
+    print(
+        f"  {C.BOLD}User Flag   :{C.RESET} {own_badge(m.get('authUserInUserOwns'))}")
+    print(
+        f"  {C.BOLD}Root Flag   :{C.RESET} {own_badge(m.get('authUserInRootOwns'))}")
+    print(
+        f"  {C.BOLD}Global Owns :{C.RESET} {C.GREEN}{m.get('user_owns_count', '?')} user{C.RESET}  /  {C.RED}{m.get('root_owns_count', '?')} root{C.RESET}"
+    )
     sep()
 
     makers = []
-    if m.get("maker"):  makers.append(m["maker"].get("name", "?"))
-    if m.get("maker2"): makers.append(m["maker2"].get("name", "?"))
+    if m.get("maker"):
+        makers.append(m["maker"].get("name", "?"))
+    if m.get("maker2"):
+        makers.append(m["maker2"].get("name", "?"))
     if makers:
         print(f"  {C.BOLD}Creator(s)  :{C.RESET} {', '.join(makers)}")
-    print(f"  {C.BOLD}Rating      :{C.RESET} ⭐ {m.get('stars','?')}/5.0")
+    print(f"  {C.BOLD}Rating      :{C.RESET} ⭐ {m.get('stars', '?')}/5.0")
     sep()
 
 
@@ -378,7 +474,7 @@ def cmd_info(id_or_name: str):
 def cmd_active():
     # Correct endpoint: /machine/active
     data = get("/machine/active")
-    m    = data.get("info")
+    m = data.get("info")
     if not m:
         warn("No machine is currently active.")
         info("Use --spawn <name> to start one.")
@@ -386,17 +482,21 @@ def cmd_active():
 
     hdr("Active Machine")
     sep()
-    print(f"  {C.BOLD}Name    :{C.RESET} {os_icon(m.get('os',''))} {m.get('name')} (ID: {m.get('id')})")
-    print(f"  {C.BOLD}IP      :{C.RESET} {C.GREEN}{m.get('ip','N/A')}{C.RESET}")
-    print(f"  {C.BOLD}OS      :{C.RESET} {m.get('os','?')}")
+    print(
+        f"  {C.BOLD}Name    :{C.RESET} {os_icon(m.get('os', ''))} {m.get('name')} (ID: {m.get('id')})"
+    )
+    print(f"  {C.BOLD}IP      :{C.RESET} {C.GREEN}{m.get('ip', 'N/A')}{C.RESET}")
+    print(f"  {C.BOLD}OS      :{C.RESET} {m.get('os', '?')}")
     expires = parse_utc(m.get("expires_at", ""))
     if expires:
         try:
-            now       = datetime.now(timezone.utc)
+            now = datetime.now(timezone.utc)
             remaining = expires - now
-            h, rem    = divmod(int(max(remaining.total_seconds(), 0)), 3600)
-            mi, s     = divmod(rem, 60)
-            print(f"  {C.BOLD}Expires :{C.RESET} {fmt_dt(expires)}  ({C.YELLOW}{h}h {mi}m remaining{C.RESET})")
+            h, rem = divmod(int(max(remaining.total_seconds(), 0)), 3600)
+            mi, s = divmod(rem, 60)
+            print(
+                f"  {C.BOLD}Expires :{C.RESET} {fmt_dt(expires)}  ({C.YELLOW}{h}h {mi}m remaining{C.RESET})"
+            )
         except Exception:
             print(f"  {C.BOLD}Expires :{C.RESET} {fmt_dt(expires)}")
     sep()
@@ -404,9 +504,9 @@ def cmd_active():
 
 # ── --spawn ───────────────────────────────────────────────────────────────────
 def cmd_spawn(id_or_name: str):
-    m          = resolve_machine(id_or_name)
+    m = resolve_machine(id_or_name)
     machine_id = m["id"]
-    name       = m["name"]
+    name = m["name"]
 
     # Check already spawned
     play = m.get("playInfo", {}) or {}
@@ -415,7 +515,9 @@ def cmd_spawn(id_or_name: str):
         print(f"  {C.BOLD}Target IP : {C.GREEN}{m['ip']}{C.RESET}")
         return
 
-    info(f"Requesting spawn for {os_icon(m.get('os',''))} {C.BOLD}{name}{C.RESET} (ID: {machine_id}) ...")
+    info(
+        f"Requesting spawn for {os_icon(m.get('os', ''))} {C.BOLD}{name}{C.RESET} (ID: {machine_id}) ..."
+    )
 
     # Use /vm/spawn with JSON body
     result = post("/vm/spawn", {"machine_id": machine_id})
@@ -427,18 +529,20 @@ def cmd_spawn(id_or_name: str):
         warn("Spawn blocked — checking if you already have an active machine ...")
         active_now = get("/machine/active", silent=True).get("info") or {}
         if active_now.get("ip"):
-            aname = active_now.get("name","?")
-            aip   = active_now.get("ip","?")
-            aid   = active_now.get("id","?")
+            aname = active_now.get("name", "?")
+            aip = active_now.get("ip", "?")
+            aid = active_now.get("id", "?")
             if str(aid) == str(machine_id):
                 ok(f"{C.BOLD}Already spawned!{C.RESET}")
             else:
-                warn(f"A different machine is active: {C.BOLD}{aname}{C.RESET} (ID: {aid})")
+                warn(
+                    f"A different machine is active: {C.BOLD}{aname}{C.RESET} (ID: {aid})"
+                )
                 info(f"Stop it first:  python3 htb.py --stop {aname}")
             sep()
             print(f"  {C.BOLD}Name      :{C.RESET} {active_now.get('name')}")
             print(f"  {C.BOLD}Target IP :{C.RESET} {C.GREEN}{C.BOLD}{aip}{C.RESET}")
-            expires_a = parse_utc(active_now.get("expires_at",""))
+            expires_a = parse_utc(active_now.get("expires_at", ""))
             if expires_a:
                 print(f"  {C.BOLD}Expires   :{C.RESET} {fmt_dt(expires_a)}")
             sep()
@@ -451,7 +555,9 @@ def cmd_spawn(id_or_name: str):
         if active_now.get("ip"):
             sep()
             print(f"  {C.BOLD}Name      :{C.RESET} {active_now.get('name')}")
-            print(f"  {C.BOLD}Target IP :{C.RESET} {C.GREEN}{C.BOLD}{active_now.get('ip')}{C.RESET}")
+            print(
+                f"  {C.BOLD}Target IP :{C.RESET} {C.GREEN}{C.BOLD}{active_now.get('ip')}{C.RESET}"
+            )
             sep()
             return
     elif msg:
@@ -462,15 +568,16 @@ def cmd_spawn(id_or_name: str):
     # Two parallel requests per tick (profile + active) to catch IP faster.
     # Intervals: instant → 1s × 30 → 3s × 20  (total ~2.5 min timeout)
     ok("Polling for IP — checking every second ...")
-    spin     = spinner_frames()
-    elapsed  = 0
+    spin = spinner_frames()
+    elapsed = 0
 
     def _check_ip():
         """Fire both endpoints in parallel, return IP string or None."""
         results = {}
 
         def _profile():
-            d = get(f"/machine/profile/{machine_id}", silent=True).get("info", {})
+            d = get(f"/machine/profile/{machine_id}",
+                    silent=True).get("info", {})
             if d.get("ip") and (d.get("playInfo") or {}).get("isSpawned"):
                 results["profile"] = d
 
@@ -481,8 +588,10 @@ def cmd_spawn(id_or_name: str):
 
         t1 = threading.Thread(target=_profile)
         t2 = threading.Thread(target=_active)
-        t1.start(); t2.start()
-        t1.join();  t2.join()
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
 
         if "profile" in results:
             return results["profile"], "profile"
@@ -494,24 +603,33 @@ def cmd_spawn(id_or_name: str):
     data, src = _check_ip()
     if not data:
         # Build schedule: 1s × 30 checks, then 3s × 20 checks
-        schedule = [1]*30 + [3]*20
+        schedule = [1] * 30 + [3] * 20
         for delay in schedule:
             time.sleep(delay)
             elapsed += delay
             frame = next(spin)
-            print(f"  {C.CYAN}{frame}{C.RESET} Waiting for IP ... ({elapsed}s elapsed)", end="\r", flush=True)
+            print(
+                f"  {C.CYAN}{frame}{C.RESET} Waiting for IP ... ({elapsed}s elapsed)",
+                end="\r",
+                flush=True,
+            )
             data, src = _check_ip()
             if data:
                 break
 
     if data:
         print(" " * 55, end="\r")
-        ok(f"{C.BOLD}Machine is UP!{C.RESET}  {C.GRAY}(detected in {elapsed}s){C.RESET}")
+        ok(
+            f"{C.BOLD}Machine is UP!{C.RESET}  {C.GRAY}(detected in {elapsed}s){C.RESET}"
+        )
         sep()
         print(f"  {C.BOLD}Name      :{C.RESET} {data.get('name')}")
         ip = data.get("ip")
         print(f"  {C.BOLD}Target IP :{C.RESET} {C.GREEN}{C.BOLD}{ip}{C.RESET}")
-        expires = parse_utc((data.get("playInfo") or {}).get("expires_at", "") or data.get("expires_at", ""))
+        expires = parse_utc(
+            (data.get("playInfo") or {}).get("expires_at", "")
+            or data.get("expires_at", "")
+        )
         if expires:
             print(f"  {C.BOLD}Expires   :{C.RESET} {fmt_dt(expires)}")
         sep()
@@ -548,14 +666,17 @@ def cmd_reset(id_or_name: str):
 # ── --submit & --pwn ──────────────────────────────────────────────────────────
 def _do_submit(machine_id, name, flag, flag_type, difficulty):
     """Submit one flag. Returns True on success."""
-    payload = {"id": machine_id, "flag": flag.strip(), "difficulty": difficulty}
-    result  = post("/machine/own", payload, silent=True)
+    payload = {"id": machine_id,
+               "flag": flag.strip(), "difficulty": difficulty}
+    result = post("/machine/own", payload, silent=True)
 
     if not result:
-        err(f"No response submitting {flag_type} flag. Is the machine spawned and active?")
+        err(
+            f"No response submitting {flag_type} flag. Is the machine spawned and active?"
+        )
         return False
 
-    msg       = result.get("message", "")
+    msg = result.get("message", "")
     msg_lower = str(msg).lower()
 
     # Check NEGATIVES first — "Incorrect" contains "correct" so order is critical
@@ -571,9 +692,15 @@ def _do_submit(machine_id, name, flag, flag_type, difficulty):
         err(f"Machine not found or not active. Is '{name}' spawned?")
         return False
     # Then check POSITIVES
-    elif isinstance(msg, list) or "correct" in msg_lower or "owned" in msg_lower \
-         or result.get("success") is True:
-        ok(f"{C.BOLD}{C.GREEN}{flag_type.upper()} FLAG ACCEPTED{C.RESET} — '{name}' {flag_type} pwned! 🎉")
+    elif (
+        isinstance(msg, list)
+        or "correct" in msg_lower
+        or "owned" in msg_lower
+        or result.get("success") is True
+    ):
+        ok(
+            f"{C.BOLD}{C.GREEN}{flag_type.upper()} FLAG ACCEPTED{C.RESET} — '{name}' {flag_type} pwned! 🎉"
+        )
         return True
     else:
         warn(f"Unexpected server response for {flag_type}:")
@@ -583,31 +710,37 @@ def _do_submit(machine_id, name, flag, flag_type, difficulty):
 
 def cmd_submit(id_or_name: str, flag: str, flag_type: str, difficulty: int):
     m = resolve_machine(id_or_name)
-    info(f"Submitting {flag_type} flag for {os_icon(m.get('os',''))} {C.BOLD}{m['name']}{C.RESET} ...")
+    info(
+        f"Submitting {flag_type} flag for {os_icon(m.get('os', ''))} {C.BOLD}{m['name']}{C.RESET} ..."
+    )
     _do_submit(m["id"], m["name"], flag, flag_type, difficulty)
 
 
 def cmd_pwn(id_or_name: str, user_flag: str, root_flag: str, difficulty: int):
-    m          = resolve_machine(id_or_name)
+    m = resolve_machine(id_or_name)
     machine_id = m["id"]
-    name       = m["name"]
+    name = m["name"]
 
-    hdr(f"Submitting both flags for {os_icon(m.get('os',''))} {name}")
+    hdr(f"Submitting both flags for {os_icon(m.get('os', ''))} {name}")
     sep()
 
     results = {}
 
     def submit_user():
-        results["user"] = _do_submit(machine_id, name, user_flag, "user", difficulty)
+        results["user"] = _do_submit(
+            machine_id, name, user_flag, "user", difficulty)
 
     def submit_root():
-        results["root"] = _do_submit(machine_id, name, root_flag, "root", difficulty)
+        results["root"] = _do_submit(
+            machine_id, name, root_flag, "root", difficulty)
 
     # Submit both in parallel for speed
     t1 = threading.Thread(target=submit_user)
     t2 = threading.Thread(target=submit_root)
-    t1.start(); t2.start()
-    t1.join();  t2.join()
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
 
     sep()
     u_ok = results.get("user", False)
@@ -626,7 +759,7 @@ def cmd_pwn(id_or_name: str, user_flag: str, root_flag: str, difficulty: int):
 def cmd_upcoming():
     info("Fetching upcoming machine releases ...")
     # Correct endpoint: /machine/unreleased
-    data     = get("/machine/unreleased")
+    data = get("/machine/unreleased")
     machines = data.get("data", [])
 
     if not machines:
@@ -635,20 +768,29 @@ def cmd_upcoming():
 
     hdr("Upcoming Machine Releases")
     sep(74)
-    print(f"  {C.BOLD}{'ID':<7} {'Name':<20} {'OS':<10} {'Diff':<10} {'Release (local)':<22} Countdown{C.RESET}")
+    print(
+        f"  {C.BOLD}{'ID':<7} {'Name':<20} {'OS':<10} {'Diff':<10} {'Release (local)':<22} Countdown{C.RESET}"
+    )
     sep(74)
     for m in machines:
         release_dt = parse_utc(m.get("release", ""))
-        cd_str     = countdown_str(release_dt) if release_dt else f"{C.GRAY}Unknown{C.RESET}"
-        rel_str    = fmt_dt(release_dt) if release_dt else "?"
-        d_text     = m.get("difficulty_text", "?")
-        retiring   = m.get("retiring", {}) or {}
-        print(f"  {str(m.get('id','?')):<7} {m.get('name','?'):<20} "
-              f"{os_icon(m.get('os','?'))} {m.get('os','?'):<8} "
-              f"{diff_colored(d_text):<20} {rel_str:<22} {cd_str}")
+        cd_str = (
+            countdown_str(
+                release_dt) if release_dt else f"{C.GRAY}Unknown{C.RESET}"
+        )
+        rel_str = fmt_dt(release_dt) if release_dt else "?"
+        d_text = m.get("difficulty_text", "?")
+        retiring = m.get("retiring", {}) or {}
+        print(
+            f"  {str(m.get('id', '?')):<7} {m.get('name', '?'):<20} "
+            f"{os_icon(m.get('os', '?'))} {m.get('os', '?'):<8} "
+            f"{diff_colored(d_text):<20} {rel_str:<22} {cd_str}"
+        )
         if retiring:
-            print(f"  {C.GRAY}         ↳ Retiring: {retiring.get('name','?')} "
-                  f"({retiring.get('os','?')}, {retiring.get('difficulty_text','?')}){C.RESET}")
+            print(
+                f"  {C.GRAY}         ↳ Retiring: {retiring.get('name', '?')} "
+                f"({retiring.get('os', '?')}, {retiring.get('difficulty_text', '?')}){C.RESET}"
+            )
     sep(74)
     info("Use --snipe <name> to auto-spawn the moment it releases.")
 
@@ -657,7 +799,7 @@ def cmd_upcoming():
 def cmd_snipe(id_or_name: str):
     """Wait for a machine's release time then instantly spawn it."""
     info(f"Looking up upcoming releases for '{id_or_name}' ...")
-    data     = get("/machine/unreleased")
+    data = get("/machine/unreleased")
     machines = data.get("data", [])
 
     target = None
@@ -674,12 +816,14 @@ def cmd_snipe(id_or_name: str):
             for m in machines:
                 release_dt = parse_utc(m.get("release", ""))
                 cd = countdown_str(release_dt) if release_dt else "?"
-                print(f"  • {C.BOLD}{m.get('name')}{C.RESET} (ID: {m.get('id')}) — releases in {cd}")
+                print(
+                    f"  • {C.BOLD}{m.get('name')}{C.RESET} (ID: {m.get('id')}) — releases in {cd}"
+                )
         sys.exit(1)
 
     release_dt = parse_utc(target.get("release", ""))
     machine_id = target["id"]
-    name       = target["name"]
+    name = target["name"]
 
     if not release_dt:
         err("No release time found for this machine.")
@@ -691,25 +835,31 @@ def cmd_snipe(id_or_name: str):
         cmd_spawn(str(machine_id))
         return
 
-    hdr(f"SNIPE MODE — {os_icon(target.get('os',''))} {name} (ID: {machine_id})")
+    hdr(f"SNIPE MODE — {os_icon(target.get('os', ''))} {name} (ID: {machine_id})")
     sep()
-    print(f"  {C.BOLD}OS          :{C.RESET} {target.get('os','?')}")
-    print(f"  {C.BOLD}Difficulty  :{C.RESET} {diff_colored(target.get('difficulty_text','?'))}")
+    print(f"  {C.BOLD}OS          :{C.RESET} {target.get('os', '?')}")
+    print(
+        f"  {C.BOLD}Difficulty  :{C.RESET} {diff_colored(target.get('difficulty_text', '?'))}"
+    )
     print(f"  {C.BOLD}Release UTC :{C.RESET} {fmt_dt(release_dt)}")
     sep()
     ok("Sniping armed. Will auto-spawn at release.  Ctrl+C to cancel.")
 
     spin = spinner_frames()
     while True:
-        now  = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
         diff = (release_dt - now).total_seconds()
-        cd   = countdown_str(release_dt)
-        print(f"  {C.CYAN}{next(spin)}{C.RESET} Releasing in {cd}        ", end="\r", flush=True)
+        cd = countdown_str(release_dt)
+        print(
+            f"  {C.CYAN}{next(spin)}{C.RESET} Releasing in {cd}        ",
+            end="\r",
+            flush=True,
+        )
 
         if diff <= 0:
             print(" " * 60, end="\r")
             ok(f"{C.BOLD}Release time! Spawning '{name}' NOW ...{C.RESET}")
-            time.sleep(1.5)   # let HTB flip the machine to spawnable state
+            time.sleep(1.5)  # let HTB flip the machine to spawnable state
             cmd_spawn(str(machine_id))
             return
         elif diff <= 10:
@@ -722,6 +872,7 @@ def cmd_snipe(id_or_name: str):
 
 # ─── Main ──────────────────────────────────────────────────────────────────────
 
+
 def main():
     banner()
 
@@ -732,28 +883,51 @@ def main():
     )
 
     g = p.add_argument_group("Machine operations")
-    g.add_argument("--search",  metavar="QUERY",   help="Search machines by name")
-    g.add_argument("--info",    metavar="ID/NAME",  help="Detailed machine info + IP")
-    g.add_argument("--active",  action="store_true",help="Show your active machine")
-    g.add_argument("--spawn",   metavar="ID/NAME",  help="Spawn a machine (fast poll)")
-    g.add_argument("--stop",    metavar="ID/NAME",  help="Stop/terminate active machine")
-    g.add_argument("--reset",   metavar="ID/NAME",  help="Reset active machine")
+    g.add_argument("--search", metavar="QUERY", help="Search machines by name")
+    g.add_argument("--info", metavar="ID/NAME",
+                   help="Detailed machine info + IP")
+    g.add_argument("--active", action="store_true",
+                   help="Show your active machine")
+    g.add_argument("--spawn", metavar="ID/NAME",
+                   help="Spawn a machine (fast poll)")
+    g.add_argument("--stop", metavar="ID/NAME",
+                   help="Stop/terminate active machine")
+    g.add_argument("--reset", metavar="ID/NAME", help="Reset active machine")
 
     g2 = p.add_argument_group("Flag submission")
-    g2.add_argument("--submit", metavar="ID/NAME",  help="Submit a single flag")
-    g2.add_argument("--flag","-f", metavar="FLAG",  help="Flag value  (use with --submit)")
-    g2.add_argument("--type",   metavar="user|root",help="Flag type   (default: user)")
-    g2.add_argument("--pwn",    metavar="ID/NAME",  help="Submit BOTH flags at once")
-    g2.add_argument("-u",       metavar="USER_FLAG",dest="user_flag", help="User flag (for --pwn)")
-    g2.add_argument("-r",       metavar="ROOT_FLAG",dest="root_flag", help="Root flag (for --pwn)")
-    g2.add_argument("--diff",   metavar="1-100",    help="Difficulty rating (default: 50)", type=int, default=50)
+    g2.add_argument("--submit", metavar="ID/NAME", help="Submit a single flag")
+    g2.add_argument(
+        "--flag", "-f", metavar="FLAG", help="Flag value  (use with --submit)"
+    )
+    g2.add_argument("--type", metavar="user|root",
+                    help="Flag type   (default: user)")
+    g2.add_argument("--pwn", metavar="ID/NAME",
+                    help="Submit BOTH flags at once")
+    g2.add_argument(
+        "-u", metavar="USER_FLAG", dest="user_flag", help="User flag (for --pwn)"
+    )
+    g2.add_argument(
+        "-r", metavar="ROOT_FLAG", dest="root_flag", help="Root flag (for --pwn)"
+    )
+    g2.add_argument(
+        "--diff",
+        metavar="1-100",
+        help="Difficulty rating (default: 50)",
+        type=int,
+        default=50,
+    )
 
     g3 = p.add_argument_group("Release tracking")
-    g3.add_argument("--upcoming",action="store_true",help="Show upcoming releases + countdowns")
-    g3.add_argument("--snipe",  metavar="ID/NAME",  help="Wait for release, then auto-spawn")
+    g3.add_argument(
+        "--upcoming", action="store_true", help="Show upcoming releases + countdowns"
+    )
+    g3.add_argument(
+        "--snipe", metavar="ID/NAME", help="Wait for release, then auto-spawn"
+    )
 
     g4 = p.add_argument_group("Account")
-    g4.add_argument("--profile",action="store_true",help="Your HTB profile summary")
+    g4.add_argument("--profile", action="store_true",
+                    help="Your HTB profile summary")
 
     args = p.parse_args()
 
@@ -772,18 +946,23 @@ def main():
             cmd_reset(args.reset)
         elif args.submit:
             if not args.flag:
-                err("--flag / -f is required with --submit"); sys.exit(1)
+                err("--flag / -f is required with --submit")
+                sys.exit(1)
             flag_type = (args.type or "user").lower()
             if flag_type not in ("user", "root"):
-                err("--type must be 'user' or 'root'"); sys.exit(1)
+                err("--type must be 'user' or 'root'")
+                sys.exit(1)
             if not 1 <= args.diff <= 100:
-                err(f"--diff must be between 1 and 100 (got {args.diff})"); sys.exit(1)
+                err(f"--diff must be between 1 and 100 (got {args.diff})")
+                sys.exit(1)
             cmd_submit(args.submit, args.flag, flag_type, args.diff)
         elif args.pwn:
             if not args.user_flag or not args.root_flag:
-                err("--pwn requires both -u <user_flag> and -r <root_flag>"); sys.exit(1)
+                err("--pwn requires both -u <user_flag> and -r <root_flag>")
+                sys.exit(1)
             if not 1 <= args.diff <= 100:
-                err(f"--diff must be between 1 and 100 (got {args.diff})"); sys.exit(1)
+                err(f"--diff must be between 1 and 100 (got {args.diff})")
+                sys.exit(1)
             cmd_pwn(args.pwn, args.user_flag, args.root_flag, args.diff)
         elif args.upcoming:
             cmd_upcoming()
