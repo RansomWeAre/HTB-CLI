@@ -74,6 +74,7 @@ def sep(n=55):  print(f"{C.GRAY}{'─'*n}{C.RESET}")
 # ─── Config ───────────────────────────────────────────────────────────────────
 
 BASE_URL = "https://labs.hackthebox.com/api/v4"
+BASE_URL_V5 = "https://labs.hackthebox.com/api/v5"
 API_KEY  = os.environ.get("HTB_API_KEY", "").strip()
 
 DIFF_COLORS = {
@@ -569,16 +570,25 @@ def cmd_reset(id_or_name: str):
 def _do_submit(machine_id, name, flag, flag_type, difficulty):
     """Submit one flag. Returns True on success."""
     payload = {"id": machine_id, "flag": flag.strip(), "difficulty": difficulty}
-    result  = post("/machine/own", payload, silent=True)
-
-    if not result:
+    
+    # v4 /machine/own has been removed — use v5
+    url = f"{BASE_URL_V5}/machine/own"
+    try:
+        r = requests.post(url, headers=_headers(), json=payload, timeout=20)
+        result = r.json()
+    except requests.exceptions.ConnectionError:
         err(f"No response submitting {flag_type} flag. Is the machine spawned and active?")
         return False
+    except requests.exceptions.Timeout:
+        err("Request timed out (20s).")
+        return False
+    except Exception:
+        err("Failed to parse response.")
+        return False
 
-    msg       = result.get("message", "")
+    msg = result.get("message", "")
     msg_lower = str(msg).lower()
 
-    # Check NEGATIVES first — "Incorrect" contains "correct" so order is critical
     if "incorrect" in msg_lower or "wrong" in msg_lower or "invalid flag" in msg_lower:
         err(f"{flag_type.upper()} flag incorrect ✘  Double-check and try again.")
         if msg and not isinstance(msg, list):
@@ -590,16 +600,18 @@ def _do_submit(machine_id, name, flag, flag_type, difficulty):
     elif "not found" in msg_lower or "no query" in msg_lower:
         err(f"Machine not found or not active. Is '{name}' spawned?")
         return False
-    # Then check POSITIVES
-    elif isinstance(msg, list) or "correct" in msg_lower or "owned" in msg_lower \
-         or result.get("success") is True:
+    elif (
+        isinstance(msg, list)
+        or "correct" in msg_lower
+        or "owned" in msg_lower
+        or result.get("success") is True
+    ):
         ok(f"{C.BOLD}{C.GREEN}{flag_type.upper()} FLAG ACCEPTED{C.RESET} — '{name}' {flag_type} pwned! 🎉")
         return True
     else:
         warn(f"Unexpected server response for {flag_type}:")
         print(f"  {C.GRAY}{json.dumps(result, indent=2)}{C.RESET}")
         return False
-
 
 def cmd_submit(id_or_name: str, flag: str, flag_type: str, difficulty: int):
     m = resolve_machine(id_or_name)
